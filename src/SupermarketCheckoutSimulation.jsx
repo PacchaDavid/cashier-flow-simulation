@@ -575,3 +575,326 @@ const SupermarketCheckoutSimulation = () => {
       );
     }
     
+   if (mostrarConfig) {
+      return (
+        <div className="w-full min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 overflow-auto">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-6xl mx-auto">
+            <h1 className="text-3xl font-bold text-center mb-2 text-blue-800">
+              🛒 Simulación de Cajas de Supermercado
+            </h1>
+            <p className="text-center text-gray-600 mb-4">Configuración de escenario personalizado</p>
+            
+            {/* Casos Predefinidos */}
+            <div className="mb-6 bg-purple-50 border border-purple-300 rounded-lg p-4">
+              <h3 className="font-bold text-purple-800 mb-3 flex items-center gap-2">
+                <Zap size={20} />
+                Casos de Prueba Rápidos:
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {Object.entries(casosPredefinidos).map(([key, caso]) => (
+                  <button
+                    key={key}
+                    onClick={() => aplicarCaso(key)}
+                    className="p-3 bg-white border-2 border-purple-200 rounded-lg hover:bg-purple-100 hover:border-purple-400 transition-all text-left"
+                  >
+                    <div className="font-semibold text-sm text-purple-800">{caso.nombre}</div>
+                    <div className="text-xs text-gray-600 mt-1">{caso.descripcion}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+  
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Cliente */}
+              <div className="bg-green-50 border border-green-300 rounded-lg p-4">
+                <h3 className="font-semibold text-green-800 mb-3">🧑 Tu información:</h3>
+                <label className="block text-sm font-medium mb-2">¿Cuántos artículos llevas?</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={configuracion.articulosNuevoCliente}
+                  onChange={(e) => {
+                    const valor = e.target.value.replace(/[^0-9]/g, '');
+                    setConfiguracion({...configuracion, articulosNuevoCliente: parseInt(valor) || 1});
+                  }}
+                  onBlur={(e) => {
+                    const num = parseInt(e.target.value) || 1;
+                    if (num > 100) setConfiguracion({...configuracion, articulosNuevoCliente: 100});
+                    if (num < 1) setConfiguracion({...configuracion, articulosNuevoCliente: 1});
+                  }}
+                  className="w-full p-2 border-2 border-green-300 rounded-lg text-lg font-semibold text-center"
+                  placeholder="15"
+                />
+                {configuracion.articulosNuevoCliente > 10 && (
+                  <p className="text-xs text-orange-600 mt-1">⚠️ No podrás usar Caja Express (límite: 10 artículos)</p>
+                )}
+              </div>
+  
+              {/* Cajas */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Número de Cajas Normales</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={configuracion.numCajasNormales}
+                  onChange={(e) => {
+                    const valor = e.target.value.replace(/[^0-9]/g, '');
+                    const num = parseInt(valor) || 1;
+                    if (num >= 1 && num <= 5) {
+                      const nuevasPersonas = Array.from({length: num}, (_, i) => configuracion.personasPorCajaNormal[i] || Math.floor(Math.random() * 3) + 2);
+                      setConfiguracion({
+                        ...configuracion, 
+                        numCajasNormales: num,
+                        personasPorCajaNormal: nuevasPersonas,
+                        cajasSeleccionadas: []
+                      });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const num = parseInt(e.target.value) || 1;
+                    if (num > 5 || num < 1) {
+                      const validNum = Math.max(1, Math.min(5, num));
+                      const nuevasPersonas = Array.from({length: validNum}, (_, i) => configuracion.personasPorCajaNormal[i] || Math.floor(Math.random() * 3) + 2);
+                      setConfiguracion({
+                        ...configuracion, 
+                        numCajasNormales: validNum,
+                        personasPorCajaNormal: nuevasPersonas,
+                        cajasSeleccionadas: []
+                      });
+                    }
+                  }}
+                  className="w-full p-2 border rounded-lg text-center"
+                  placeholder="3"
+                />
+              </div>
+            </div>
+  
+            {/* Personas por caja */}
+            <div className="mt-4 bg-blue-50 border border-blue-300 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-800 mb-3">👥 Personas en cada caja normal:</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {Array.from({length: configuracion.numCajasNormales}).map((_, i) => (
+                  <div key={i}>
+                    <label className="block text-xs font-medium mb-1">Caja {i + 1}</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={configuracion.personasPorCajaNormal[i] || 0}
+                      onChange={(e) => {
+                        const valor = e.target.value.replace(/[^0-9]/g, '');
+                        actualizarPersonasCaja(i, valor);
+                      }}
+                      onBlur={(e) => {
+                        const num = parseInt(e.target.value) || 0;
+                        if (num > 50) actualizarPersonasCaja(i, '50');
+                        if (num < 0) actualizarPersonasCaja(i, '0');
+                      }}
+                      className="w-full p-2 border rounded-lg text-center"
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+  
+            {/* Express */}
+            <div className="mt-4 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={configuracion.incluirCajaExpress}
+                onChange={(e) => setConfiguracion({...configuracion, incluirCajaExpress: e.target.checked})}
+                className="w-4 h-4"
+              />
+              <label className="text-sm font-medium">Incluir Caja Express (máx 10 artículos)</label>
+            </div>
+  
+            {configuracion.incluirCajaExpress && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium mb-2">Personas en Caja Express</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={configuracion.personasCajaExpress}
+                  onChange={(e) => {
+                    const valor = e.target.value.replace(/[^0-9]/g, '');
+                    setConfiguracion({...configuracion, personasCajaExpress: parseInt(valor) || 0});
+                  }}
+                  onBlur={(e) => {
+                    const num = parseInt(e.target.value) || 0;
+                    if (num > 50) setConfiguracion({...configuracion, personasCajaExpress: 50});
+                    if (num < 0) setConfiguracion({...configuracion, personasCajaExpress: 0});
+                  }}
+                  className="w-full p-2 border rounded-lg text-center"
+                  placeholder="0"
+                />
+              </div>
+            )}
+  
+            {/* Experiencia */}
+            <div className="mt-4 bg-purple-50 border border-purple-300 rounded-lg p-4">
+              <h3 className="font-semibold text-purple-800 mb-2">⚡ Experiencia de cajeros (aleatorio):</h3>
+              <div className="grid md:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-1">
+                    <span className="text-xl">🆕</span> Novato:
+                  </label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="12"
+                    value={configuracion.tiempoEscaneoNovato}
+                    onChange={(e) => setConfiguracion({...configuracion, tiempoEscaneoNovato: parseInt(e.target.value) || 8})}
+                    className="w-full p-2 border rounded mt-1 text-center"
+                  />
+                  <span className="text-xs text-gray-600">seg/artículo</span>
+                </div>
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-1">
+                    <span className="text-xl">⭐</span> Normal:
+                  </label>
+                  <input
+                    type="number"
+                    min="3"
+                    max="8"
+                    value={configuracion.tiempoEscaneoNormal}
+                    onChange={(e) => setConfiguracion({...configuracion, tiempoEscaneoNormal: parseInt(e.target.value) || 5})}
+                    className="w-full p-2 border rounded mt-1 text-center"
+                  />
+                  <span className="text-xs text-gray-600">seg/artículo</span>
+                </div>
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-1">
+                    <span className="text-xl">🏆</span> Experto:
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={configuracion.tiempoEscaneoExperto}
+                    onChange={(e) => setConfiguracion({...configuracion, tiempoEscaneoExperto: parseInt(e.target.value) || 3})}
+                    className="w-full p-2 border rounded mt-1 text-center"
+                  />
+                  <span className="text-xs text-gray-600">seg/artículo</span>
+                </div>
+              </div>
+            </div>
+  
+            {/* Configuraciones adicionales */}
+            <div className="mt-4 bg-orange-50 border border-orange-300 rounded-lg p-4">
+              <h3 className="font-semibold text-orange-800 mb-3">⚙️ Configuraciones de simulación:</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Artículos por persona (rango aleatorio)</label>
+                  <div className="flex gap-2 items-center">
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={configuracion.articulosAleatorios.min}
+                        onChange={(e) => setConfiguracion({
+                          ...configuracion, 
+                          articulosAleatorios: {...configuracion.articulosAleatorios, min: parseInt(e.target.value) || 1}
+                        })}
+                        className="w-full p-2 border rounded text-center"
+                        placeholder="Mín"
+                      />
+                      <span className="text-xs text-gray-600">Mínimo</span>
+                    </div>
+                    <span>-</span>
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={configuracion.articulosAleatorios.max}
+                        onChange={(e) => setConfiguracion({
+                          ...configuracion, 
+                          articulosAleatorios: {...configuracion.articulosAleatorios, max: parseInt(e.target.value) || 50}
+                        })}
+                        className="w-full p-2 border rounded text-center"
+                        placeholder="Máx"
+                      />
+                      <span className="text-xs text-gray-600">Máximo</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-2">Tiempo de cobro (depende del método de pago del cliente)</label>
+                  <div className="flex gap-2 items-center">
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        min="5"
+                        max="60"
+                        value={configuracion.tiempoCobro.min}
+                        onChange={(e) => setConfiguracion({
+                          ...configuracion, 
+                          tiempoCobro: {...configuracion.tiempoCobro, min: parseInt(e.target.value) || 15}
+                        })}
+                        className="w-full p-2 border rounded text-center"
+                        placeholder="Mín"
+                      />
+                      <span className="text-xs text-gray-600">Mín (seg) - Ej: tarjeta</span>
+                    </div>
+                    <span>-</span>
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        min="5"
+                        max="60"
+                        value={configuracion.tiempoCobro.max}
+                        onChange={(e) => setConfiguracion({
+                          ...configuracion, 
+                          tiempoCobro: {...configuracion.tiempoCobro, max: parseInt(e.target.value) || 30}
+                        })}
+                        className="w-full p-2 border rounded text-center"
+                        placeholder="Máx"
+                      />
+                      <span className="text-xs text-gray-600">Máx (seg) - Ej: efectivo</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    💳 El tiempo de cobro es aleatorio porque depende de cómo pague cada cliente, no del cajero.
+                  </p>
+                </div>
+              </div>
+            </div>
+  
+            {/* Selección de cajas */}
+            <div className="mt-4 bg-yellow-50 border border-yellow-300 rounded-lg p-4">
+              <h3 className="font-semibold text-yellow-800 mb-3">📍 Selecciona a qué cajas quieres ir:</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {Array.from({length: configuracion.numCajasNormales}).map((_, i) => (
+                  <label key={i} className="flex items-center gap-2 p-2 border rounded-lg hover:bg-yellow-100 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={configuracion.cajasSeleccionadas.includes(i)}
+                      onChange={() => toggleCajaSeleccionada(i)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm font-medium">Caja {i + 1}</span>
+                  </label>
+                ))}
+                {configuracion.incluirCajaExpress && (
+                  <label className="flex items-center gap-2 p-2 border rounded-lg hover:bg-yellow-100 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={configuracion.cajasSeleccionadas.includes(configuracion.numCajasNormales)}
+                      onChange={() => toggleCajaSeleccionada(configuracion.numCajasNormales)}
+                      disabled={configuracion.articulosNuevoCliente > 10}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm font-medium">🚀 Caja Express</span>
+                  </label>
+                )}
+              </div>
+              <p className="text-xs text-gray-600 mt-2">
+                Seleccionadas: {configuracion.cajasSeleccionadas.length} caja(s)
+              </p>
+            </div>
