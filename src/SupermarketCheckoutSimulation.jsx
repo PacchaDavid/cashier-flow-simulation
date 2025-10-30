@@ -1,28 +1,110 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Users, ShoppingCart, Clock } from 'lucide-react';
+import { Play, Pause, RotateCcw, Users, ShoppingCart, Clock, TrendingDown, AlertCircle, Award, Star, BarChart3, Zap } from 'lucide-react';
 
 const SupermarketCheckoutSimulation = () => {
   const [cajas, setCajas] = useState([]);
   const [cajaExpress, setCajaExpress] = useState(null);
   const [nuevoCliente, setNuevoCliente] = useState(null);
   const [simulacionActiva, setSimulacionActiva] = useState(false);
-  const [velocidadSimulacion, setVelocidadSimulacion] = useState(100);
+  const [velocidadSimulacion, setVelocidadSimulacion] = useState(50);
   const [configuracion, setConfiguracion] = useState({
     numCajasNormales: 3,
+    personasPorCajaNormal: [3, 4, 2],
+    personasCajaExpress: 5,
+    tiempoEscaneoNovato: 8,
     tiempoEscaneoNormal: 5,
-    tiempoEscaneoExpress: 4,
+    tiempoEscaneoExperto: 3,
+    tiempoCobro: { min: 15, max: 30 },
+    articulosAleatorios: { min: 1, max: 50 },
     incluirCajaExpress: true,
-    articulosNuevoCliente: 15
+    articulosNuevoCliente: 15,
+    cajasSeleccionadas: [],
+    asignacionCajerosAleatoria: true,
+    cajerosAsignados: ['normal', 'normal', 'normal'],
+    cajeroExpress: 'experto'
   });
   const [mostrarConfig, setMostrarConfig] = useState(true);
   const [tiempoTranscurrido, setTiempoTranscurrido] = useState(0);
   const [analisisCompleto, setAnalisisCompleto] = useState(null);
   const [todosLosClientesSalieron, setTodosLosClientesSalieron] = useState(false);
+  const [errorExpress, setErrorExpress] = useState('');
+  const [historialSimulaciones, setHistorialSimulaciones] = useState([]);
+  const [mostrarTabla, setMostrarTabla] = useState(false);
   const intervaloRef = useRef(null);
 
-  const generarCliente = (id, maxArticulos = 30, minArticulos = 5) => {
+  // Casos predefinidos para probar
+  const casosPredefinidos = {
+    todasLasCajas: {
+      nombre: "Todas las cajas",
+      descripcion: "Compara tu tiempo en todas las cajas disponibles",
+      config: (config) => ({
+        ...config,
+        cajasSeleccionadas: Array.from({ length: config.numCajasNormales + (config.incluirCajaExpress ? 1 : 0) }, (_, i) => i)
+      })
+    },
+    soloExpress: {
+      nombre: "Solo Caja Express",
+      descripcion: "Prueba únicamente la caja express (máx 10 artículos)",
+      config: (config) => ({
+        ...config,
+        articulosNuevoCliente: Math.min(config.articulosNuevoCliente, 10),
+        articulosAleatorios: { min: 3, max: 10 },
+        cajasSeleccionadas: config.incluirCajaExpress ? [config.numCajasNormales] : []
+      })
+    },
+    normalVsExpress: {
+      nombre: "Mejor Normal vs Express",
+      descripcion: "Compara la mejor caja normal contra express",
+      config: (config) => {
+        const personasPorCaja = config.personasPorCajaNormal || [];
+        const cajaMenosPersonas = personasPorCaja.indexOf(Math.min(...personasPorCaja));
+        return {
+          ...config,
+          articulosNuevoCliente: Math.min(config.articulosNuevoCliente, 10),
+          articulosAleatorios: { min: 3, max: 10 },
+          cajasSeleccionadas: config.incluirCajaExpress ? [cajaMenosPersonas, config.numCajasNormales] : [cajaMenosPersonas]
+        };
+      }
+    },
+    pocosArticulos: {
+      nombre: "Pocos artículos (1-5)",
+      descripcion: "Simula compra rápida con pocos artículos",
+      config: (config) => ({
+        ...config,
+        articulosNuevoCliente: Math.floor(Math.random() * 5) + 1,
+        articulosAleatorios: { min: 1, max: 5 },
+        personasPorCajaNormal: Array.from({ length: config.numCajasNormales }, () => Math.floor(Math.random() * 4) + 2),
+        personasCajaExpress: Math.floor(Math.random() * 4) + 3,
+        cajasSeleccionadas: Array.from({ length: config.numCajasNormales + (config.incluirCajaExpress ? 1 : 0) }, (_, i) => i)
+      })
+    },
+    muchosArticulos: {
+      nombre: "Muchos artículos (30-50)",
+      descripcion: "Simula compra grande del mes",
+      config: (config) => ({
+        ...config,
+        articulosNuevoCliente: Math.floor(Math.random() * 21) + 30,
+        articulosAleatorios: { min: 30, max: 50 },
+        personasPorCajaNormal: Array.from({ length: config.numCajasNormales }, () => Math.floor(Math.random() * 4) + 2),
+        cajasSeleccionadas: Array.from({ length: config.numCajasNormales }, (_, i) => i)
+      })
+    },
+    horaPico: {
+      nombre: "Hora pico",
+      descripcion: "Todas las cajas con muchas personas (20-50 por caja)",
+      config: (config) => ({
+        ...config,
+        personasPorCajaNormal: Array.from({ length: config.numCajasNormales }, () => Math.floor(Math.random() * 31) + 20),
+        personasCajaExpress: Math.floor(Math.random() * 31) + 20,
+        articulosAleatorios: { min: 5, max: 30 },
+        cajasSeleccionadas: Array.from({ length: config.numCajasNormales + (config.incluirCajaExpress ? 1 : 0) }, (_, i) => i)
+      })
+    }
+  };
+
+  const generarCliente = (id, maxArticulos = 50, minArticulos = 5) => {
     const articulos = Math.floor(Math.random() * (maxArticulos - minArticulos + 1)) + minArticulos;
-    const tiempoCobro = Math.floor(Math.random() * 16) + 15;
+    const tiempoCobro = Math.floor(Math.random() * (configuracion.tiempoCobro.max - configuracion.tiempoCobro.min + 1)) + configuracion.tiempoCobro.min;
     return {
       id,
       articulos,
@@ -41,20 +123,73 @@ const SupermarketCheckoutSimulation = () => {
     }, 0);
   };
 
+  const formatearTiempo = (segundos) => {
+    const minutos = Math.floor(segundos / 60);
+    const segs = segundos % 60;
+    if (minutos === 0) return `${segs}s`;
+    return `${minutos}m ${segs}s`;
+  };
+
+  const getNivelExperiencia = (tiempoEscaneo) => {
+    if (tiempoEscaneo >= 7) return { nivel: 'Novato', icon: '🆕', color: 'text-orange-600' };
+    if (tiempoEscaneo >= 5) return { nivel: 'Normal', icon: '⭐', color: 'text-blue-600' };
+    return { nivel: 'Experto', icon: '🏆', color: 'text-green-600' };
+  };
+
+  const aplicarCaso = (nombreCaso) => {
+    const caso = casosPredefinidos[nombreCaso];
+    if (caso) {
+      setConfiguracion(prev => caso.config(prev));
+      setErrorExpress('');
+    }
+  };
+
   const inicializarSimulacion = () => {
+    // Validar caja express
+    if (configuracion.articulosNuevoCliente > 10 && 
+        configuracion.incluirCajaExpress && 
+        configuracion.cajasSeleccionadas.includes(configuracion.numCajasNormales)) {
+      setErrorExpress('❌ No puedes ir a la Caja Express con más de 10 artículos');
+      return;
+    }
+    
+    if (configuracion.cajasSeleccionadas.length === 0) {
+      setErrorExpress('❌ Debes seleccionar al menos una caja');
+      return;
+    }
+    
+    setErrorExpress('');
+    
     const nuevasCajas = [];
     let clienteId = 1;
 
+    // Crear array de tipos de cajero para asignar aleatoriamente
+    const tiposEscaneo = [
+      configuracion.tiempoEscaneoNovato,
+      configuracion.tiempoEscaneoNormal,
+      configuracion.tiempoEscaneoExperto
+    ];
+    
+    const tiposAsignados = [];
+    for (let i = 0; i < configuracion.numCajasNormales + (configuracion.incluirCajaExpress ? 1 : 0); i++) {
+      tiposAsignados.push(tiposEscaneo[Math.floor(Math.random() * tiposEscaneo.length)]);
+    }
+
+    // Usar los rangos configurados de artículos
+    const minArticulos = configuracion.articulosAleatorios.min;
+    const maxArticulos = configuracion.articulosAleatorios.max;
+
     for (let i = 0; i < configuracion.numCajasNormales; i++) {
       const clientes = [];
-      const numPersonas = Math.floor(Math.random() * 3) + 2;
+      const numPersonas = configuracion.personasPorCajaNormal[i] || 3;
       for (let j = 0; j < numPersonas; j++) {
-        clientes.push(generarCliente(clienteId++, 30, 5));
+        clientes.push(generarCliente(clienteId++, maxArticulos, minArticulos));
       }
+      
       nuevasCajas.push({
         id: i + 1,
         tipo: 'normal',
-        tiempoEscaneo: configuracion.tiempoEscaneoNormal,
+        tiempoEscaneo: tiposAsignados[i],
         clientes,
         tiempoTotal: 0,
         clientesAtendidos: 0
@@ -64,14 +199,19 @@ const SupermarketCheckoutSimulation = () => {
     let nuevaCajaExpress = null;
     if (configuracion.incluirCajaExpress) {
       const clientesExpress = [];
-      const numClientesExpress = Math.floor(Math.random() * 3) + 4;
+      const numClientesExpress = configuracion.personasCajaExpress;
+      // Caja express siempre tiene artículos entre 1 y 10 (respetando el rango si es menor)
+      const maxArticulosExpress = Math.min(10, maxArticulos);
+      const minArticulosExpress = Math.min(minArticulos, maxArticulosExpress);
+      
       for (let j = 0; j < numClientesExpress; j++) {
-        clientesExpress.push(generarCliente(clienteId++, 10, 3));
+        clientesExpress.push(generarCliente(clienteId++, maxArticulosExpress, minArticulosExpress));
       }
+      
       nuevaCajaExpress = {
         id: 'express',
         tipo: 'express',
-        tiempoEscaneo: configuracion.tiempoEscaneoExpress,
+        tiempoEscaneo: tiposAsignados[configuracion.numCajasNormales],
         clientes: clientesExpress,
         tiempoTotal: 0,
         clientesAtendidos: 0,
@@ -83,7 +223,7 @@ const SupermarketCheckoutSimulation = () => {
       id: 'NUEVO',
       articulos: configuracion.articulosNuevoCliente,
       articulosRestantes: configuracion.articulosNuevoCliente,
-      tiempoCobro: Math.floor(Math.random() * 16) + 15,
+      tiempoCobro: Math.floor(Math.random() * (configuracion.tiempoCobro.max - configuracion.tiempoCobro.min + 1)) + configuracion.tiempoCobro.min,
       tiempoRestante: 0,
       enAtencion: false,
       esNuevoCliente: true,
@@ -98,13 +238,17 @@ const SupermarketCheckoutSimulation = () => {
       nuevaCajaExpress.tiempoTotal = calcularTiempoTotal(nuevaCajaExpress);
     }
 
-    nuevasCajas.forEach(caja => {
-      caja.clientes.push({...clienteNuevo, id: `NUEVO_CAJA_${caja.id}`});
+    // Agregar el nuevo cliente AL FINAL de las cajas SELECCIONADAS
+    configuracion.cajasSeleccionadas.forEach(indexCaja => {
+      if (indexCaja < configuracion.numCajasNormales) {
+        const caja = nuevasCajas[indexCaja];
+        const clienteCopia = {...clienteNuevo, id: `NUEVO_CAJA_${caja.id}`};
+        caja.clientes.push(clienteCopia);
+      } else if (nuevaCajaExpress && configuracion.articulosNuevoCliente <= 10) {
+        const clienteCopia = {...clienteNuevo, id: 'NUEVO_CAJA_EXPRESS'};
+        nuevaCajaExpress.clientes.push(clienteCopia);
+      }
     });
-    
-    if (nuevaCajaExpress && clienteNuevo.articulos <= 10) {
-      nuevaCajaExpress.clientes.push({...clienteNuevo, id: 'NUEVO_CAJA_EXPRESS'});
-    }
 
     setCajas(nuevasCajas);
     setCajaExpress(nuevaCajaExpress);
@@ -192,375 +336,3 @@ const SupermarketCheckoutSimulation = () => {
       });
     }
   };
-
-  useEffect(() => {
-    if (simulacionActiva) {
-      intervaloRef.current = setInterval(() => {
-        simularPaso();
-      }, velocidadSimulacion);
-    } else {
-      if (intervaloRef.current) {
-        clearInterval(intervaloRef.current);
-      }
-    }
-
-    return () => {
-      if (intervaloRef.current) {
-        clearInterval(intervaloRef.current);
-      }
-    };
-  }, [simulacionActiva, velocidadSimulacion, tiempoTranscurrido]);
-
-  useEffect(() => {
-    if (cajas.length === 0) return;
-    
-    const todosClientesSalieron = cajas.every(c => c.clientes.length === 0) && 
-                                   (!cajaExpress || cajaExpress.clientes.length === 0);
-    
-    if (todosClientesSalieron && !todosLosClientesSalieron) {
-      setTodosLosClientesSalieron(true);
-      setSimulacionActiva(false);
-      calcularAnalisis();
-    }
-  }, [cajas, cajaExpress]);
-
-  const calcularAnalisis = () => {
-    const resultados = [];
-    
-    cajas.forEach(caja => {
-      const tiempoInicial = caja.tiempoTotal + (nuevoCliente.articulos * caja.tiempoEscaneo) + nuevoCliente.tiempoCobro;
-      resultados.push({
-        nombre: `Caja ${caja.id}`,
-        tipo: 'normal',
-        tiempoEstimado: tiempoInicial,
-        tiempoReal: tiempoTranscurrido
-      });
-    });
-    
-    if (cajaExpress && nuevoCliente.articulos <= 10) {
-      const tiempoInicial = cajaExpress.tiempoTotal + (nuevoCliente.articulos * cajaExpress.tiempoEscaneo) + nuevoCliente.tiempoCobro;
-      resultados.push({
-        nombre: 'Caja Express',
-        tipo: 'express',
-        tiempoEstimado: tiempoInicial,
-        tiempoReal: tiempoTranscurrido
-      });
-    }
-    
-    const mejorEstimado = resultados.reduce((mejor, actual) => 
-      actual.tiempoEstimado < mejor.tiempoEstimado ? actual : mejor
-    );
-    
-    const peorEstimado = resultados.reduce((peor, actual) => 
-      actual.tiempoEstimado > peor.tiempoEstimado ? actual : peor
-    );
-    
-    setAnalisisCompleto({
-      resultados,
-      mejorEstimado,
-      peorEstimado,
-      diferenciaMaxima: peorEstimado.tiempoEstimado - mejorEstimado.tiempoEstimado
-    });
-  };
-
-  const reiniciar = () => {
-    setSimulacionActiva(false);
-    setCajas([]);
-    setCajaExpress(null);
-    setNuevoCliente(null);
-    setTiempoTranscurrido(0);
-    setAnalisisCompleto(null);
-    setTodosLosClientesSalieron(false);
-    setMostrarConfig(true);
-  };
-
-  const ClienteIcono = ({ cliente, enAtencion, posicion }) => (
-    <div className={`flex flex-col items-center p-2 m-1 rounded-lg transition-all duration-300 ${
-      cliente.esNuevoCliente 
-        ? 'bg-gradient-to-br from-green-200 to-green-300 border-2 border-green-600 shadow-xl scale-110' 
-        : enAtencion 
-          ? 'bg-yellow-200 scale-105 shadow-lg' 
-          : 'bg-blue-100'
-    }`}>
-      {cliente.esNuevoCliente && (
-        <div className="text-xs font-bold text-green-700 mb-1">¡TÚ!</div>
-      )}
-      <Users size={cliente.esNuevoCliente ? 28 : 24} 
-             className={cliente.esNuevoCliente ? 'text-green-700' : enAtencion ? 'text-yellow-600' : 'text-blue-600'} />
-      <div className="text-xs mt-1 flex items-center gap-1">
-        <ShoppingCart size={12} />
-        <span className="font-semibold">
-          {enAtencion ? cliente.articulosRestantes : cliente.articulos}
-        </span>
-      </div>
-      {enAtencion && cliente.tiempoRestante > 0 && (
-        <div className="text-xs text-red-600 font-bold mt-1">
-          {cliente.tiempoRestante}s
-        </div>
-      )}
-      {!enAtencion && posicion > 0 && (
-        <div className="text-xs text-gray-500 mt-1">
-          #{posicion}
-        </div>
-      )}
-    </div>
-  );
-
-  if (mostrarConfig) {
-    return (
-      <div className="w-full h-screen bg-gradient-to-br from-blue-50 to-green-50 p-8 flex items-center justify-center">
-        <div className="bg-white rounded-xl shadow-2xl p-8 max-w-2xl w-full">
-          <h1 className="text-3xl font-bold text-center mb-2 text-blue-800">
-            🛒 Simulación de Cajas de Supermercado
-          </h1>
-          <p className="text-center text-gray-600 mb-6">Validación de hipótesis: ¿En qué caja salgo más rápido?</p>
-          
-          <div className="space-y-4">
-            <div className="bg-green-50 border border-green-300 rounded-lg p-4">
-              <h3 className="font-semibold text-green-800 mb-2">🧑 Tu información como cliente:</h3>
-              <label className="block text-sm font-medium mb-2">¿Cuántos artículos llevas?</label>
-              <input
-                type="number"
-                min="1"
-                max="50"
-                value={configuracion.articulosNuevoCliente}
-                onChange={(e) => setConfiguracion({...configuracion, articulosNuevoCliente: parseInt(e.target.value)})}
-                className="w-full p-2 border-2 border-green-300 rounded-lg text-lg font-semibold"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Número de Cajas Normales</label>
-              <input
-                type="number"
-                min="2"
-                max="4"
-                value={configuracion.numCajasNormales}
-                onChange={(e) => setConfiguracion({...configuracion, numCajasNormales: parseInt(e.target.value)})}
-                className="w-full p-2 border rounded-lg"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium mb-2">Tiempo de Escaneo Normal (seg/artículo)</label>
-              <input
-                type="number"
-                min="3"
-                max="10"
-                value={configuracion.tiempoEscaneoNormal}
-                onChange={(e) => setConfiguracion({...configuracion, tiempoEscaneoNormal: parseInt(e.target.value)})}
-                className="w-full p-2 border rounded-lg"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium mb-2">Tiempo de Escaneo Express (seg/artículo)</label>
-              <input
-                type="number"
-                min="3"
-                max="10"
-                value={configuracion.tiempoEscaneoExpress}
-                onChange={(e) => setConfiguracion({...configuracion, tiempoEscaneoExpress: parseInt(e.target.value)})}
-                className="w-full p-2 border rounded-lg"
-              />
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={configuracion.incluirCajaExpress}
-                onChange={(e) => setConfiguracion({...configuracion, incluirCajaExpress: e.target.checked})}
-                className="w-4 h-4"
-              />
-              <label className="text-sm font-medium">Incluir Caja Express (máx 10 artículos)</label>
-            </div>
-          </div>
-          
-          <button
-            onClick={inicializarSimulacion}
-            className="w-full mt-6 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-lg"
-          >
-            🎯 Iniciar Simulación
-          </button>
-          
-          <div className="mt-4 bg-yellow-50 border border-yellow-300 rounded-lg p-3">
-            <p className="text-sm text-yellow-800">
-              <strong>💡 Nota:</strong> Estarás en TODAS las cajas simultáneamente para comparar tiempos reales.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-center mb-2 text-blue-800">
-          🛒 Simulación de Cajas de Supermercado
-        </h1>
-        <p className="text-center text-gray-600 mb-4">
-          Llevas {nuevoCliente?.articulos} artículos - Estás en TODAS las cajas
-        </p>
-        
-        <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
-          <div className="flex flex-wrap gap-4 items-center justify-center">
-            <button
-              onClick={() => setSimulacionActiva(!simulacionActiva)}
-              disabled={todosLosClientesSalieron}
-              className={`flex items-center gap-2 px-6 py-2 rounded-lg font-semibold transition-colors ${
-                todosLosClientesSalieron 
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : simulacionActiva 
-                    ? 'bg-red-500 hover:bg-red-600' 
-                    : 'bg-green-500 hover:bg-green-600'
-              } text-white`}
-            >
-              {simulacionActiva ? <><Pause size={20} /> Pausar</> : <><Play size={20} /> Iniciar</>}
-            </button>
-            
-            <button
-              onClick={reiniciar}
-              className="flex items-center gap-2 px-6 py-2 bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition-colors"
-            >
-              <RotateCcw size={20} /> Nueva Simulación
-            </button>
-            
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">Velocidad:</label>
-              <input
-                type="range"
-                min="50"
-                max="500"
-                step="50"
-                value={velocidadSimulacion}
-                onChange={(e) => setVelocidadSimulacion(parseInt(e.target.value))}
-                className="w-32"
-              />
-              <span className="text-sm">{velocidadSimulacion}ms</span>
-            </div>
-
-            <div className="flex items-center gap-2 bg-blue-100 px-4 py-2 rounded-lg">
-              <Clock size={20} />
-              <span className="font-semibold">Tiempo: {tiempoTranscurrido}s</span>
-            </div>
-          </div>
-        </div>
-
-        {todosLosClientesSalieron && analisisCompleto && (
-          <div className="bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-500 rounded-lg p-6 mb-4">
-            <h2 className="text-2xl font-bold text-purple-800 mb-4 text-center">
-              🎉 ¡Análisis Completo!
-            </h2>
-            
-            <div className="bg-white rounded-lg p-4 shadow mb-4">
-              <h3 className="font-bold text-lg mb-3">📊 Comparación de Tiempos:</h3>
-              <div className="space-y-2">
-                {analisisCompleto.resultados
-                  .sort((a, b) => a.tiempoEstimado - b.tiempoEstimado)
-                  .map((resultado, idx) => (
-                    <div key={idx} className={`p-3 rounded-lg flex justify-between items-center ${
-                      idx === 0 
-                        ? 'bg-green-100 border-2 border-green-500' 
-                        : idx === analisisCompleto.resultados.length - 1
-                          ? 'bg-red-50 border border-red-300'
-                          : 'bg-gray-50'
-                    }`}>
-                      <div>
-                        <span className="font-semibold">{resultado.nombre}</span>
-                        {idx === 0 && <span className="ml-2 text-xs bg-green-600 text-white px-2 py-0.5 rounded">MEJOR</span>}
-                        {idx === analisisCompleto.resultados.length - 1 && <span className="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded">PEOR</span>}
-                      </div>
-                      <div className="font-bold text-lg">{resultado.tiempoEstimado}s</div>
-                    </div>
-                  ))}
-              </div>
-              
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm font-semibold text-blue-800">
-                  💡 Diferencia: {analisisCompleto.diferenciaMaxima}s entre mejor y peor opción
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={reiniciar}
-              className="w-full mt-4 bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition-colors"
-            >
-              🔄 Nueva Simulación
-            </button>
-          </div>
-        )}
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {cajas.map((caja) => (
-            <div key={caja.id} className="bg-white rounded-lg shadow-lg p-4 border-2 border-blue-300">
-              <div className="flex justify-between items-center mb-3">
-                <h2 className="text-xl font-bold text-blue-700">Caja {caja.id}</h2>
-                <div className="text-sm">
-                  <Clock size={16} className="inline" /> {caja.tiempoEscaneo}s/art
-                </div>
-              </div>
-              
-              <div className="mb-2 text-sm">
-                <p>En fila: <span className="font-bold">{caja.clientes.length}</span></p>
-                <p>Tiempo estimado: <span className="font-bold">{caja.tiempoTotal}s</span></p>
-              </div>
-              
-              <div className="border-t pt-2">
-                <div className="flex flex-wrap min-h-[80px]">
-                  {caja.clientes.map((cliente, idx) => (
-                    <ClienteIcono 
-                      key={cliente.id} 
-                      cliente={cliente} 
-                      enAtencion={idx === 0 && cliente.enAtencion}
-                      posicion={idx + 1}
-                    />
-                  ))}
-                  {caja.clientes.length === 0 && (
-                    <div className="text-gray-400 italic w-full text-center py-4">Caja vacía</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-          
-          {cajaExpress && (
-            <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-lg shadow-lg p-4 border-2 border-red-400">
-              <div className="flex justify-between items-center mb-3">
-                <h2 className="text-xl font-bold text-red-700">🚀 Caja Express</h2>
-                <div className="text-sm">
-                  <Clock size={16} className="inline" /> {cajaExpress.tiempoEscaneo}s/art
-                </div>
-              </div>
-              
-              <div className="mb-2 text-sm">
-                <p>En fila: <span className="font-bold">{cajaExpress.clientes.length}</span></p>
-                <p>Tiempo estimado: <span className="font-bold">{cajaExpress.tiempoTotal}s</span></p>
-                <p className="text-red-600 font-semibold">⚠️ Máx 10 artículos</p>
-              </div>
-              
-              <div className="border-t pt-2">
-                <div className="flex flex-wrap min-h-[80px]">
-                  {cajaExpress.clientes.map((cliente, idx) => (
-                    <ClienteIcono 
-                      key={cliente.id} 
-                      cliente={cliente} 
-                      enAtencion={idx === 0 && cliente.enAtencion}
-                      posicion={idx + 1}
-                    />
-                  ))}
-                  {cajaExpress.clientes.length === 0 && (
-                    <div className="text-gray-400 italic w-full text-center py-4">Caja vacía</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default SupermarketCheckoutSimulation;
