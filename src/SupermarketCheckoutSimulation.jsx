@@ -898,3 +898,317 @@ const SupermarketCheckoutSimulation = () => {
                 Seleccionadas: {configuracion.cajasSeleccionadas.length} caja(s)
               </p>
             </div>
+
+            {errorExpress && (
+            <div className="mt-4 bg-red-100 border border-red-400 rounded-lg p-3 text-center">
+              <p className="text-red-800 font-semibold">{errorExpress}</p>
+            </div>
+          )}
+
+          {/* Botones */}
+          <div className="mt-6 flex gap-3">
+            <button
+              onClick={inicializarSimulacion}
+              disabled={configuracion.cajasSeleccionadas.length === 0}
+              className={`flex-1 py-3 rounded-lg font-semibold text-lg transition-colors ${
+                configuracion.cajasSeleccionadas.length === 0
+                  ? 'bg-gray-400 cursor-not-allowed text-gray-600'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              {configuracion.cajasSeleccionadas.length === 0 
+                ? '⚠️ Selecciona al menos una caja' 
+                : '🎯 Iniciar Simulación'}
+            </button>
+            
+            {historialSimulaciones.length > 0 && (
+              <button
+                onClick={() => setMostrarTabla(true)}
+                className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors flex items-center gap-2"
+              >
+                <BarChart3 size={20} />
+                Ver Historial
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold text-center mb-2 text-blue-800">
+          🛒 Simulación de Cajas de Supermercado
+        </h1>
+        <p className="text-center text-gray-600 mb-4">
+          Llevas {nuevoCliente?.articulos} artículos - En {configuracion.cajasSeleccionadas.length} caja(s)
+        </p>
+        
+        <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
+          <div className="flex flex-wrap gap-4 items-center justify-center">
+            <button
+              onClick={() => setSimulacionActiva(!simulacionActiva)}
+              disabled={todosLosClientesSalieron}
+              className={`flex items-center gap-2 px-6 py-2 rounded-lg font-semibold transition-colors ${
+                todosLosClientesSalieron 
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : simulacionActiva 
+                    ? 'bg-red-500 hover:bg-red-600' 
+                    : 'bg-green-500 hover:bg-green-600'
+              } text-white`}
+            >
+              {simulacionActiva ? <><Pause size={20} /> Pausar</> : <><Play size={20} /> Iniciar</>}
+            </button>
+            
+            <button
+              onClick={reiniciar}
+              className="flex items-center gap-2 px-6 py-2 bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition-colors"
+            >
+              <RotateCcw size={20} /> Nueva Simulación
+            </button>
+            
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Velocidad:</label>
+              <input
+                type="range"
+                min="10"
+                max="1000"
+                step="10"
+                value={velocidadSimulacion}
+                onChange={(e) => setVelocidadSimulacion(parseInt(e.target.value))}
+                className="w-32"
+              />
+              <span className="text-sm">{velocidadSimulacion}ms</span>
+            </div>
+
+            <div className="flex items-center gap-2 bg-blue-100 px-4 py-2 rounded-lg">
+              <Clock size={20} />
+              <span className="font-semibold">Tiempo: {formatearTiempo(tiempoTranscurrido)}</span>
+            </div>
+          </div>
+        </div>
+
+        {todosLosClientesSalieron && analisisCompleto && (
+          <div className="bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-500 rounded-lg p-6 mb-4">
+            <h2 className="text-2xl font-bold text-purple-800 mb-4 text-center">
+              🎉 ¡Análisis Completo - Resultados!
+            </h2>
+            
+            <div className="bg-white rounded-lg p-4 shadow mb-4">
+              <h3 className="font-bold text-lg mb-3">📊 Comparación de las cajas donde te formaste:</h3>
+              <div className="space-y-2">
+                {analisisCompleto.resultados
+                  .sort((a, b) => a.tiempoEstimado - b.tiempoEstimado)
+                  .map((resultado, idx) => {
+                    const expInfo = getNivelExperiencia(resultado.tiempoEscaneo);
+                    return (
+                      <div key={idx} className={`p-3 rounded-lg flex justify-between items-center ${
+                        idx === 0 
+                          ? 'bg-green-100 border-2 border-green-500' 
+                          : idx === analisisCompleto.resultados.length - 1
+                            ? 'bg-red-50 border border-red-300'
+                            : 'bg-gray-50'
+                      }`}>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{resultado.nombre}</span>
+                            <span className={`text-lg ${expInfo.color}`} title={expInfo.nivel}>
+                              {expInfo.icon}
+                            </span>
+                            <span className={`text-xs ${expInfo.color} font-semibold`}>
+                              {expInfo.nivel}
+                            </span>
+                          </div>
+                          {idx === 0 && <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded mt-1 inline-block">MEJOR ELECCIÓN</span>}
+                          {idx === analisisCompleto.resultados.length - 1 && analisisCompleto.resultados.length > 1 && (
+                            <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded mt-1 inline-block">PEOR ELECCIÓN</span>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-lg">{formatearTiempo(resultado.tiempoEstimado)}</div>
+                          <div className="text-xs text-gray-500">{resultado.tiempoEscaneo}s por artículo</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+              
+              {analisisCompleto.resultados.length > 1 && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm font-semibold text-blue-800">
+                    💡 Diferencia entre tu mejor y peor elección: {formatearTiempo(analisisCompleto.diferenciaMaxima)}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    {analisisCompleto.diferenciaMaxima > 30 
+                      ? '¡Elegir bien puede ahorrarte más de medio minuto!'
+                      : 'La diferencia es pequeña, cualquier opción era buena.'}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {configuracion.incluirCajaExpress && configuracion.cajasSeleccionadas.includes(configuracion.numCajasNormales) && nuevoCliente.articulos <= 10 && (
+              <div className="bg-blue-50 border border-blue-300 rounded-lg p-4 mb-4">
+                <h3 className="font-bold text-lg mb-2">🚀 Conclusión sobre Caja Express:</h3>
+                <p className="text-sm text-gray-700">
+                  {(() => {
+                    const express = analisisCompleto.resultados.find(r => r.tipo === 'express');
+                    const normales = analisisCompleto.resultados.filter(r => r.tipo === 'normal');
+                    
+                    if (!express || normales.length === 0) return 'No hay datos suficientes para comparar.';
+                    
+                    const mejorNormal = normales.sort((a, b) => a.tiempoEstimado - b.tiempoEstimado)[0];
+                    
+                    if (express.tiempoEstimado < mejorNormal.tiempoEstimado) {
+                      return `✅ La Caja Express FUE la mejor opción (${formatearTiempo(express.tiempoEstimado)} vs ${formatearTiempo(mejorNormal.tiempoEstimado)} de ${mejorNormal.nombre}). El límite de 10 artículos y la experiencia del cajero (${express.experiencia}) la hacen eficiente.`;
+                    } else if (express.tiempoEstimado === mejorNormal.tiempoEstimado) {
+                      return `⚖️ La Caja Express empató con ${mejorNormal.nombre} (ambas ${formatearTiempo(express.tiempoEstimado)}). Cualquiera de las dos hubiera sido buena opción.`;
+                    } else {
+                      const diferencia = express.tiempoEstimado - mejorNormal.tiempoEstimado;
+                      return `❌ La Caja Express NO fue la mejor opción (${formatearTiempo(express.tiempoEstimado)} vs ${formatearTiempo(mejorNormal.tiempoEstimado)} de ${mejorNormal.nombre}). Perdiste ${formatearTiempo(diferencia)} por elegir Express. La cantidad de personas en fila superó la ventaja del límite de artículos.`;
+                    }
+                  })()}
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={reiniciar}
+                className="flex-1 bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition-colors"
+              >
+                🔄 Probar otra configuración
+              </button>
+              
+              <button
+                onClick={() => setMostrarTabla(true)}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                <BarChart3 size={20} />
+                Ver Tabla Comparativa
+              </button>
+            </div>
+          </div>
+        )}
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {cajas.map((caja, index) => {
+            const tieneCliente = configuracion.cajasSeleccionadas.includes(index);
+            const expInfo = getNivelExperiencia(caja.tiempoEscaneo);
+            
+            return (
+              <div key={caja.id} className={`rounded-lg shadow-lg p-4 border-2 ${
+                tieneCliente 
+                  ? 'bg-green-50 border-green-500'
+                  : 'bg-white border-blue-300 opacity-60'
+              }`}>
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold text-blue-700">Caja {caja.id}</h2>
+                    <span className={`text-2xl ${expInfo.color}`} title={expInfo.nivel}>
+                      {expInfo.icon}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    <div className="flex items-center gap-1">
+                      <Clock size={16} />
+                      <span>{caja.tiempoEscaneo}s/art</span>
+                    </div>
+                    <div className={`text-xs font-semibold ${expInfo.color}`}>
+                      {expInfo.nivel}
+                    </div>
+                  </div>
+                </div>
+                
+                {!tieneCliente && (
+                  <div className="text-xs text-gray-500 mb-2 italic">
+                    No te formaste aquí
+                  </div>
+                )}
+                
+                <div className="mb-2 text-sm">
+                  <p>Personas en fila: <span className="font-bold">{caja.clientes.length}</span></p>
+                  <p>Tiempo estimado inicial: <span className="font-bold">{formatearTiempo(caja.tiempoTotal)}</span></p>
+                </div>
+                
+                <div className="border-t pt-2">
+                  <div className="flex flex-wrap min-h-[80px]">
+                    {caja.clientes.map((cliente, idx) => (
+                      <ClienteIcono 
+                        key={cliente.id} 
+                        cliente={cliente} 
+                        enAtencion={idx === 0 && cliente.enAtencion}
+                        posicion={idx + 1}
+                      />
+                    ))}
+                    {caja.clientes.length === 0 && (
+                      <div className="text-gray-400 italic w-full text-center py-4">Caja vacía</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          
+          {cajaExpress && (
+            <div className={`rounded-lg shadow-lg p-4 border-2 ${
+              configuracion.cajasSeleccionadas.includes(configuracion.numCajasNormales)
+                ? 'bg-green-50 border-green-500'
+                : 'bg-gradient-to-br from-red-50 to-pink-50 border-red-400 opacity-60'
+            }`}>
+              <div className="flex justify-between items-center mb-3">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-red-700">🚀 Caja Express</h2>
+                  <span className={`text-2xl ${getNivelExperiencia(cajaExpress.tiempoEscaneo).color}`}>
+                    {getNivelExperiencia(cajaExpress.tiempoEscaneo).icon}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-600">
+                  <div className="flex items-center gap-1">
+                    <Clock size={16} />
+                    <span>{cajaExpress.tiempoEscaneo}s/art</span>
+                  </div>
+                  <div className={`text-xs font-semibold ${getNivelExperiencia(cajaExpress.tiempoEscaneo).color}`}>
+                    {getNivelExperiencia(cajaExpress.tiempoEscaneo).nivel}
+                  </div>
+                </div>
+              </div>
+              
+              {!configuracion.cajasSeleccionadas.includes(configuracion.numCajasNormales) && (
+                <div className="text-xs text-gray-500 mb-2 italic">
+                  {nuevoCliente.articulos > 10 ? 'No cumples el requisito (>10 arts)' : 'No te formaste aquí'}
+                </div>
+              )}
+              
+              <div className="mb-2 text-sm">
+                <p>Personas en fila: <span className="font-bold">{cajaExpress.clientes.length}</span></p>
+                <p>Tiempo estimado inicial: <span className="font-bold">{formatearTiempo(cajaExpress.tiempoTotal)}</span></p>
+                <p className="text-red-600 font-semibold">⚠️ Máximo 10 artículos</p>
+              </div>
+              
+              <div className="border-t pt-2">
+                <div className="flex flex-wrap min-h-[80px]">
+                  {cajaExpress.clientes.map((cliente, idx) => (
+                    <ClienteIcono 
+                      key={cliente.id} 
+                      cliente={cliente} 
+                      enAtencion={idx === 0 && cliente.enAtencion}
+                      posicion={idx + 1}
+                    />
+                  ))}
+                  {cajaExpress.clientes.length === 0 && (
+                    <div className="text-gray-400 italic w-full text-center py-4">Caja vacía</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default SupermarketCheckoutSimulation;
