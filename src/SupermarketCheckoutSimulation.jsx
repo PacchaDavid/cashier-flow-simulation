@@ -336,3 +336,242 @@ const SupermarketCheckoutSimulation = () => {
       });
     }
   };
+
+  useEffect(() => {
+      if (simulacionActiva) {
+        intervaloRef.current = setInterval(() => {
+          simularPaso();
+        }, velocidadSimulacion);
+      } else {
+        if (intervaloRef.current) {
+          clearInterval(intervaloRef.current);
+        }
+      }
+  
+      return () => {
+        if (intervaloRef.current) {
+          clearInterval(intervaloRef.current);
+        }
+      };
+    }, [simulacionActiva, velocidadSimulacion, tiempoTranscurrido, cajaExpress]);
+  
+    useEffect(() => {
+      if (cajas.length === 0 || todosLosClientesSalieron) return;
+      
+      // Verificar si el nuevo cliente salió de todas las cajas donde se formó
+      let nuevoClienteSalioDeTodasPartes = true;
+      
+      configuracion.cajasSeleccionadas.forEach(idx => {
+        if (idx < configuracion.numCajasNormales && cajas[idx]) {
+          // Verificar si el nuevo cliente todavía está en esta caja
+          const tieneNuevoCliente = cajas[idx].clientes.some(cl => cl.esNuevoCliente);
+          if (tieneNuevoCliente) {
+            nuevoClienteSalioDeTodasPartes = false;
+          }
+        } else if (idx === configuracion.numCajasNormales && cajaExpress) {
+          // Verificar en caja express
+          const tieneNuevoCliente = cajaExpress.clientes.some(cl => cl.esNuevoCliente);
+          if (tieneNuevoCliente) {
+            nuevoClienteSalioDeTodasPartes = false;
+          }
+        }
+      });
+      
+      if (nuevoClienteSalioDeTodasPartes && configuracion.cajasSeleccionadas.length > 0) {
+        setTodosLosClientesSalieron(true);
+        setSimulacionActiva(false);
+        calcularAnalisis();
+      }
+    }, [cajas, cajaExpress, tiempoTranscurrido]);
+  
+    const calcularAnalisis = () => {
+      const resultados = [];
+      
+      configuracion.cajasSeleccionadas.forEach(indexCaja => {
+        if (indexCaja < configuracion.numCajasNormales) {
+          const caja = cajas[indexCaja];
+          const tiempoInicial = caja.tiempoTotal + (nuevoCliente.articulos * caja.tiempoEscaneo) + nuevoCliente.tiempoCobro;
+          resultados.push({
+            nombre: `Caja ${caja.id}`,
+            tipo: 'normal',
+            tiempoEstimado: tiempoInicial,
+            tiempoReal: tiempoTranscurrido,
+            experiencia: getNivelExperiencia(caja.tiempoEscaneo).nivel,
+            tiempoEscaneo: caja.tiempoEscaneo
+          });
+        } else if (cajaExpress && nuevoCliente.articulos <= 10) {
+          const tiempoInicial = cajaExpress.tiempoTotal + (nuevoCliente.articulos * cajaExpress.tiempoEscaneo) + nuevoCliente.tiempoCobro;
+          resultados.push({
+            nombre: 'Caja Express',
+            tipo: 'express',
+            tiempoEstimado: tiempoInicial,
+            tiempoReal: tiempoTranscurrido,
+            experiencia: getNivelExperiencia(cajaExpress.tiempoEscaneo).nivel,
+            tiempoEscaneo: cajaExpress.tiempoEscaneo
+          });
+        }
+      });
+      
+      if (resultados.length === 0) return;
+      
+      const mejorEstimado = resultados.reduce((mejor, actual) => 
+        actual.tiempoEstimado < mejor.tiempoEstimado ? actual : mejor
+      );
+      
+      const peorEstimado = resultados.reduce((peor, actual) => 
+        actual.tiempoEstimado > peor.tiempoEstimado ? actual : peor
+      );
+      
+      const analisis = {
+        resultados,
+        mejorEstimado,
+        peorEstimado,
+        diferenciaMaxima: peorEstimado.tiempoEstimado - mejorEstimado.tiempoEstimado,
+        articulosCliente: nuevoCliente.articulos,
+        tiempoReal: tiempoTranscurrido,
+        fecha: new Date().toLocaleString()
+      };
+      
+      setAnalisisCompleto(analisis);
+      
+      setHistorialSimulaciones(prev => {
+        const nuevoHistorial = [analisis, ...prev].slice(0, 5);
+        return nuevoHistorial;
+      });
+    };
+  
+    const reiniciar = () => {
+      setSimulacionActiva(false);
+      setCajas([]);
+      setCajaExpress(null);
+      setNuevoCliente(null);
+      setTiempoTranscurrido(0);
+      setAnalisisCompleto(null);
+      setTodosLosClientesSalieron(false);
+      setErrorExpress('');
+      setMostrarConfig(true);
+    };
+  
+    const toggleCajaSeleccionada = (index) => {
+      setConfiguracion(prev => {
+        const nuevasSeleccionadas = prev.cajasSeleccionadas.includes(index)
+          ? prev.cajasSeleccionadas.filter(i => i !== index)
+          : [...prev.cajasSeleccionadas, index];
+        return { ...prev, cajasSeleccionadas: nuevasSeleccionadas };
+      });
+    };
+  
+    const actualizarPersonasCaja = (index, valor) => {
+      setConfiguracion(prev => {
+        const nuevasPersonas = [...prev.personasPorCajaNormal];
+        nuevasPersonas[index] = parseInt(valor) || 0;
+        return { ...prev, personasPorCajaNormal: nuevasPersonas };
+      });
+    };
+  
+    const ClienteIcono = ({ cliente, enAtencion, posicion }) => (
+      <div className={`flex flex-col items-center p-2 m-1 rounded-lg transition-all duration-300 ${
+        cliente.esNuevoCliente 
+          ? 'bg-gradient-to-br from-green-200 to-green-300 border-2 border-green-600 shadow-xl scale-110' 
+          : enAtencion 
+            ? 'bg-yellow-200 scale-105 shadow-lg' 
+            : 'bg-blue-100'
+      }`}>
+        {cliente.esNuevoCliente && (
+          <div className="text-xs font-bold text-green-700 mb-1">¡TÚ!</div>
+        )}
+        <Users size={cliente.esNuevoCliente ? 28 : 24} 
+               className={cliente.esNuevoCliente ? 'text-green-700' : enAtencion ? 'text-yellow-600' : 'text-blue-600'} />
+        <div className="text-xs mt-1 flex items-center gap-1">
+          <ShoppingCart size={12} />
+          <span className="font-semibold">
+            {enAtencion ? cliente.articulosRestantes : cliente.articulos}
+          </span>
+        </div>
+        {enAtencion && cliente.tiempoRestante > 0 && (
+          <div className="text-xs text-red-600 font-bold mt-1">
+            {cliente.tiempoRestante}s
+          </div>
+        )}
+        {!enAtencion && posicion > 0 && (
+          <div className="text-xs text-gray-500 mt-1">
+            #{posicion}
+          </div>
+        )}
+      </div>
+    );
+  
+    if (mostrarTabla) {
+      return (
+        <div className="w-full min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-8">
+          <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-2xl p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-3xl font-bold text-blue-800">
+                📊 Historial de Simulaciones
+              </h1>
+              <button
+                onClick={() => setMostrarTabla(false)}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+              >
+                Volver
+              </button>
+            </div>
+  
+            {historialSimulaciones.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <BarChart3 size={64} className="mx-auto mb-4 opacity-50" />
+                <p>No hay simulaciones registradas aún</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-blue-100">
+                      <th className="border p-3 text-left">#</th>
+                      <th className="border p-3 text-left">Fecha/Hora</th>
+                      <th className="border p-3 text-left">Artículos</th>
+                      <th className="border p-3 text-left">Mejor Opción</th>
+                      <th className="border p-3 text-left">Tiempo Estimado</th>
+                      <th className="border p-3 text-left">Tiempo Real</th>
+                      <th className="border p-3 text-left">Diferencia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historialSimulaciones.map((sim, idx) => (
+                      <tr key={idx} className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                        <td className="border p-3 font-bold">{idx + 1}</td>
+                        <td className="border p-3 text-sm">{sim.fecha}</td>
+                        <td className="border p-3 text-center">
+                          <span className="bg-blue-100 px-2 py-1 rounded">{sim.articulosCliente}</span>
+                        </td>
+                        <td className="border p-3">
+                          <span className="font-semibold">{sim.mejorEstimado.nombre}</span>
+                          <br />
+                          <span className="text-xs text-gray-600">{sim.mejorEstimado.experiencia}</span>
+                        </td>
+                        <td className="border p-3 text-center font-semibold text-green-700">
+                          {formatearTiempo(sim.mejorEstimado.tiempoEstimado)}
+                        </td>
+                        <td className="border p-3 text-center font-semibold text-blue-700">
+                          {formatearTiempo(sim.tiempoReal)}
+                        </td>
+                        <td className="border p-3 text-center">
+                          {sim.diferenciaMaxima > 0 ? (
+                            <span className="text-orange-600 font-semibold">
+                              {formatearTiempo(sim.diferenciaMaxima)}
+                            </span>
+                          ) : (
+                            <span className="text-green-600">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
